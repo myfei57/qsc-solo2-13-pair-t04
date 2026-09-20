@@ -66,6 +66,22 @@ _ENV_FIELDS: dict[str, Any] = {
     "furnace_purge_seconds": float,
     "furnace_min_smelt_dwell_seconds": float,
     "furnace_transition_timeout_seconds": float,
+    "slagyard_cooling_bays": int,
+    "slagyard_min_cool_seconds": float,
+    "slagyard_cool_seconds_per_ton": float,
+    "slagyard_ladle_max_tons": float,
+    "slagmill_feed_rate_max_tph": float,
+    "slagmill_grind_fineness_min_pct": float,
+    "slagmill_grind_fineness_max_pct": float,
+    "slagmill_base_recovery": float,
+    "slagmill_recovery_min": float,
+    "slagmill_recovery_max": float,
+    "slagmill_ref_grade_pct": float,
+    "slagmill_recovery_grade_slope": float,
+    "slagmill_ref_fineness_pct": float,
+    "slagmill_recovery_size_slope": float,
+    "slagmill_conc_grade_pct": float,
+    "slagmill_reagent_max_kgpt": float,
 }
 
 
@@ -120,6 +136,26 @@ class Settings:
     furnace_purge_seconds: float = 15.0
     furnace_min_smelt_dwell_seconds: float = 45.0
     furnace_transition_timeout_seconds: float = 600.0
+
+    # 渣场缓冷与倒渣。
+    slagyard_cooling_bays: int = 6
+    slagyard_min_cool_seconds: float = 28800.0
+    slagyard_cool_seconds_per_ton: float = 300.0
+    slagyard_ladle_max_tons: float = 30.0
+
+    # 磨选给矿、加药与回收模型。
+    slagmill_feed_rate_max_tph: float = 60.0
+    slagmill_grind_fineness_min_pct: float = 55.0
+    slagmill_grind_fineness_max_pct: float = 95.0
+    slagmill_base_recovery: float = 0.85
+    slagmill_recovery_min: float = 0.50
+    slagmill_recovery_max: float = 0.97
+    slagmill_ref_grade_pct: float = 1.0
+    slagmill_recovery_grade_slope: float = 0.02
+    slagmill_ref_fineness_pct: float = 75.0
+    slagmill_recovery_size_slope: float = 0.004
+    slagmill_conc_grade_pct: float = 25.0
+    slagmill_reagent_max_kgpt: float = 1.0
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None, **overrides: Any) -> "Settings":
@@ -242,6 +278,62 @@ class Settings:
                     "purge": self.furnace_purge_seconds,
                 },
             )
+        if self.slagyard_cooling_bays < 1:
+            raise ValidationError("缓冷位数量必须为正", details={"bays": self.slagyard_cooling_bays})
+        if self.slagyard_min_cool_seconds <= 0:
+            raise ValidationError(
+                "最短缓冷时长必须为正", details={"min_cool": self.slagyard_min_cool_seconds}
+            )
+        if self.slagyard_cool_seconds_per_ton < 0:
+            raise ValidationError(
+                "单位吨位缓冷时长不能为负", details={"per_ton": self.slagyard_cool_seconds_per_ton}
+            )
+        if self.slagyard_ladle_max_tons <= 0:
+            raise ValidationError("渣包容量上限必须为正", details={"max": self.slagyard_ladle_max_tons})
+        if self.slagmill_feed_rate_max_tph <= 0:
+            raise ValidationError("磨机给矿上限必须为正", details={"max": self.slagmill_feed_rate_max_tph})
+        if not 0 < self.slagmill_grind_fineness_min_pct < self.slagmill_grind_fineness_max_pct <= 100:
+            raise ValidationError(
+                "磨矿细度量程不合法",
+                details={
+                    "min": self.slagmill_grind_fineness_min_pct,
+                    "max": self.slagmill_grind_fineness_max_pct,
+                },
+            )
+        if not 0 < self.slagmill_recovery_min < self.slagmill_recovery_max <= 1:
+            raise ValidationError(
+                "回收率量程不合法",
+                details={"min": self.slagmill_recovery_min, "max": self.slagmill_recovery_max},
+            )
+        if not self.slagmill_recovery_min <= self.slagmill_base_recovery <= self.slagmill_recovery_max:
+            raise ValidationError(
+                "基准回收率必须落在回收率量程内",
+                details={
+                    "base": self.slagmill_base_recovery,
+                    "min": self.slagmill_recovery_min,
+                    "max": self.slagmill_recovery_max,
+                },
+            )
+        if self.slagmill_ref_grade_pct <= 0:
+            raise ValidationError("参考品位必须为正", details={"ref_grade": self.slagmill_ref_grade_pct})
+        if self.slagmill_recovery_grade_slope < 0:
+            raise ValidationError(
+                "品位回收系数不能为负", details={"slope": self.slagmill_recovery_grade_slope}
+            )
+        if not 0 < self.slagmill_ref_fineness_pct <= 100:
+            raise ValidationError(
+                "参考细度必须在 (0,100] 区间", details={"ref_fineness": self.slagmill_ref_fineness_pct}
+            )
+        if self.slagmill_recovery_size_slope < 0:
+            raise ValidationError(
+                "细度回收系数不能为负", details={"slope": self.slagmill_recovery_size_slope}
+            )
+        if not 0 < self.slagmill_conc_grade_pct < 100:
+            raise ValidationError(
+                "铜精矿品位必须在 (0,100) 区间", details={"conc_grade": self.slagmill_conc_grade_pct}
+            )
+        if self.slagmill_reagent_max_kgpt <= 0:
+            raise ValidationError("加药量上限必须为正", details={"max": self.slagmill_reagent_max_kgpt})
 
     def with_root(self, root: Path | str) -> "Settings":
         updated = replace(self, root=Path(root))

@@ -75,6 +75,15 @@ class SlagPort(Protocol):
     def status(self) -> Mapping[str, Any]: ...
 
 
+@runtime_checkable
+class SlagYardPort(Protocol):
+    def feed_available_tons(self) -> float: ...
+
+    def consume_feed(self, tons: float, actor: str) -> Mapping[str, Any]: ...
+
+    def status(self) -> Mapping[str, Any]: ...
+
+
 __all__ = [
     "BurnerPort",
     "FeedPort",
@@ -84,4 +93,5 @@ __all__ = [
     "MattePort",
     "ConverterPort",
     "SlagPort",
+    "SlagYardPort",
 ]
