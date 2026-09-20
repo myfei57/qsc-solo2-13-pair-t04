@@ -17,12 +17,14 @@ from .conv import Converter
 from .errors import ValidationError
 from .furnace import FlashFurnace
 from .matte import MatteTap
+from .mill import Mill
 from .ns import Namespace
 from .oxygen import OxygenSystem
 from .params import Params
 from .runtime import Clock, Generation, Metrics, RuntimeContext
 from .settler import Settler
 from .slag import SlagTap
+from .slagyard import SlagYard
 from .store import DurableStore
 from .waste import WasteHeatBoiler
 
@@ -81,6 +83,8 @@ class Application:
         self.slag.bind_matte(self.matte)
         self.matte.bind_converter(self.conv)
         self.oxygen.bind_feed_port(self.conc)
+        self.slagyard = SlagYard(ctx, slag=self.slag)
+        self.mill = Mill(ctx, yard=self.slagyard)
         self.components: tuple[Component, ...] = (
             self.furnace,
             self.burner,
@@ -91,6 +95,8 @@ class Application:
             self.matte,
             self.conv,
             self.waste,
+            self.slagyard,
+            self.mill,
         )
         self._by_name: dict[str, Component] = {component.name: component for component in self.components}
 
@@ -404,6 +410,91 @@ class Application:
         def _slag_reset(params: Params) -> Mapping[str, Any]:
             return self.slag.reset(
                 params.text("actor", required=False, default="control-room"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("slagyard.arrive")
+        def _slagyard_arrive(params: Params) -> Mapping[str, Any]:
+            return self.slagyard.arrive(
+                params.text("actor", required=False, default="slag-yard"),
+                ladle_id=params.text("ladle_id"),
+                heat_id=params.text("heat_id"),
+                tons=params.number("tons", minimum=0.0),
+                cu_grade=params.number("cu_grade", minimum=0.0, maximum=1.0),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("slagyard.assign")
+        def _slagyard_assign(params: Params) -> Mapping[str, Any]:
+            return self.slagyard.assign(
+                params.text("actor", required=False, default="slag-yard"),
+                cell_id=params.optional_text("cell_id"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("slagyard.pour")
+        def _slagyard_pour(params: Params) -> Mapping[str, Any]:
+            return self.slagyard.pour(
+                params.text("actor", required=False, default="slag-yard"),
+                cell_id=params.text("cell_id"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("slagyard.finish_cooling")
+        def _slagyard_finish_cooling(params: Params) -> Mapping[str, Any]:
+            return self.slagyard.finish_cooling(
+                params.text("actor", required=False, default="slag-yard"),
+                cell_id=params.text("cell_id"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("slagyard.release")
+        def _slagyard_release(params: Params) -> Mapping[str, Any]:
+            return self.slagyard.release(
+                params.text("actor", required=False, default="slag-yard"),
+                cell_id=params.text("cell_id"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("mill.schedule")
+        def _mill_schedule(params: Params) -> Mapping[str, Any]:
+            return self.mill.schedule(
+                params.text("actor", required=False, default="mill-room"),
+                tons=params.number("tons", minimum=0.0),
+                rate_tph=params.number("rate_tph", minimum=0.0),
+                grind_um=params.number("grind_um", minimum=0.0),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("mill.dose")
+        def _mill_dose(params: Params) -> Mapping[str, Any]:
+            return self.mill.dose(
+                params.text("actor", required=False, default="mill-room"),
+                collector_gpt=params.number("collector_gpt", minimum=0.0),
+                frother_gpt=params.number("frother_gpt", minimum=0.0),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("mill.run")
+        def _mill_run(params: Params) -> Mapping[str, Any]:
+            return self.mill.run(
+                params.text("actor", required=False, default="mill-room"),
+                correlation_id=params.optional_text("correlation_id"),
+                expected_generation=params.optional_number("expected_generation"),
+            )
+
+        @register("mill.finish_batch")
+        def _mill_finish_batch(params: Params) -> Mapping[str, Any]:
+            return self.mill.finish_batch(
+                params.text("actor", required=False, default="mill-room"),
                 correlation_id=params.optional_text("correlation_id"),
                 expected_generation=params.optional_number("expected_generation"),
             )

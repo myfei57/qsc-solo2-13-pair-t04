@@ -66,6 +66,24 @@ _ENV_FIELDS: dict[str, Any] = {
     "furnace_purge_seconds": float,
     "furnace_min_smelt_dwell_seconds": float,
     "furnace_transition_timeout_seconds": float,
+    "slagyard_cell_count": int,
+    "slagyard_cell_capacity_tons": float,
+    "slagyard_min_cool_seconds": float,
+    "slagyard_grade_max": float,
+    "mill_feed_rate_max_tph": float,
+    "mill_grind_min_um": float,
+    "mill_grind_max_um": float,
+    "mill_collector_base_gpt": float,
+    "mill_collector_per_percent_gpt": float,
+    "mill_frother_base_gpt": float,
+    "mill_frother_per_percent_gpt": float,
+    "mill_reagent_tolerance": float,
+    "mill_conc_grade": float,
+    "mill_recovery_base": float,
+    "mill_recovery_grind_coeff": float,
+    "mill_recovery_reference_um": float,
+    "mill_recovery_min": float,
+    "mill_recovery_max": float,
 }
 
 
@@ -120,6 +138,28 @@ class Settings:
     furnace_purge_seconds: float = 15.0
     furnace_min_smelt_dwell_seconds: float = 45.0
     furnace_transition_timeout_seconds: float = 600.0
+
+    # 渣场缓冷：坑位数量、单坑容量与最短缓冷时长；渣含铜量程用于到货化验校验。
+    slagyard_cell_count: int = 4
+    slagyard_cell_capacity_tons: float = 60.0
+    slagyard_min_cool_seconds: float = 57600.0
+    slagyard_grade_max: float = 0.08
+
+    # 磨选：给矿与磨矿粒度量程、按品位核算的药剂配方、回收率模型与精矿品位。
+    mill_feed_rate_max_tph: float = 120.0
+    mill_grind_min_um: float = 38.0
+    mill_grind_max_um: float = 150.0
+    mill_collector_base_gpt: float = 20.0
+    mill_collector_per_percent_gpt: float = 15.0
+    mill_frother_base_gpt: float = 10.0
+    mill_frother_per_percent_gpt: float = 2.0
+    mill_reagent_tolerance: float = 0.2
+    mill_conc_grade: float = 0.25
+    mill_recovery_base: float = 0.88
+    mill_recovery_grind_coeff: float = 0.0012
+    mill_recovery_reference_um: float = 75.0
+    mill_recovery_min: float = 0.5
+    mill_recovery_max: float = 0.95
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None, **overrides: Any) -> "Settings":
@@ -241,6 +281,73 @@ class Settings:
                     "timeout": self.furnace_transition_timeout_seconds,
                     "purge": self.furnace_purge_seconds,
                 },
+            )
+        if self.slagyard_cell_count < 1:
+            raise ValidationError(
+                "缓冷坑位数量必须为正", details={"count": self.slagyard_cell_count}
+            )
+        if self.slagyard_cell_capacity_tons <= 0:
+            raise ValidationError(
+                "缓冷坑位容量必须为正", details={"capacity": self.slagyard_cell_capacity_tons}
+            )
+        if self.slagyard_min_cool_seconds <= 0:
+            raise ValidationError(
+                "最短缓冷时长必须为正", details={"seconds": self.slagyard_min_cool_seconds}
+            )
+        if not 0 < self.slagyard_grade_max < 1:
+            raise ValidationError(
+                "渣含铜量程必须是 (0,1) 区间比例", details={"max": self.slagyard_grade_max}
+            )
+        if self.mill_feed_rate_max_tph <= 0:
+            raise ValidationError(
+                "磨选给矿速率上限必须为正", details={"rate": self.mill_feed_rate_max_tph}
+            )
+        if not 0 < self.mill_grind_min_um < self.mill_grind_max_um:
+            raise ValidationError(
+                "磨矿粒度量程不合法",
+                details={"min": self.mill_grind_min_um, "max": self.mill_grind_max_um},
+            )
+        if self.mill_collector_base_gpt < 0 or self.mill_collector_per_percent_gpt < 0:
+            raise ValidationError(
+                "捕收剂配方系数不能为负",
+                details={
+                    "base": self.mill_collector_base_gpt,
+                    "per_percent": self.mill_collector_per_percent_gpt,
+                },
+            )
+        if self.mill_frother_base_gpt < 0 or self.mill_frother_per_percent_gpt < 0:
+            raise ValidationError(
+                "起泡剂配方系数不能为负",
+                details={
+                    "base": self.mill_frother_base_gpt,
+                    "per_percent": self.mill_frother_per_percent_gpt,
+                },
+            )
+        if not 0 < self.mill_reagent_tolerance < 1:
+            raise ValidationError(
+                "药剂容差必须是 (0,1) 区间比例", details={"tolerance": self.mill_reagent_tolerance}
+            )
+        if not 0 < self.mill_conc_grade < 1:
+            raise ValidationError(
+                "精矿品位必须是 (0,1) 区间比例", details={"grade": self.mill_conc_grade}
+            )
+        if self.mill_conc_grade <= self.slagyard_grade_max:
+            raise ValidationError(
+                "精矿品位必须高于渣含铜量程上限，否则分选在量程上不成立",
+                details={"conc_grade": self.mill_conc_grade, "slag_grade_max": self.slagyard_grade_max},
+            )
+        if not 0 < self.mill_recovery_min <= self.mill_recovery_max <= 1:
+            raise ValidationError(
+                "回收率量程不合法",
+                details={"min": self.mill_recovery_min, "max": self.mill_recovery_max},
+            )
+        if self.mill_recovery_reference_um <= 0:
+            raise ValidationError(
+                "回收率基准粒度必须为正", details={"reference": self.mill_recovery_reference_um}
+            )
+        if self.mill_recovery_grind_coeff < 0:
+            raise ValidationError(
+                "回收率粒度系数不能为负", details={"coeff": self.mill_recovery_grind_coeff}
             )
 
     def with_root(self, root: Path | str) -> "Settings":
